@@ -31,6 +31,6 @@ astrolabe-esque style
 
 ## credit
 
-inspired by @sugiyamer on instagram and youtube
+inspired by @sugiyamer on [instagram](https://www.instagram.com/sugiyamer/) and [youtube](https://www.youtube.com/@sugiyamer)
 
-see this video: [![90-Second Tutorial on Vibe Coding for Computer Vision Using Gemini]](https://youtube.com/shorts/MzUMk9KCBpA?si=F__FAt-RwFMzc-L0)
+see this video: [90-Second Tutorial on Vibe Coding for Computer Vision Using Gemini](https://youtube.com/shorts/MzUMk9KCBpA?si=F__FAt-RwFMzc-L0)
