@@ -17,6 +17,8 @@ Mediapipe webcam overlay that maps waveform output to usage of two hands. Displa
 
 **Second hand:** picture of bird mapped between thumb and pinky finger. size of bird picture increases or decreases volume accordingly.
 
+**Modes:** click on "mode: synthesis" button to switch to "mode: bird call" and vice versa
+
 ## stack
 
 - **Computer Vision:** MediaPipe Hands (21-point landmark tracking)
