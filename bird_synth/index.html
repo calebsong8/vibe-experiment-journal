@@ -3,335 +3,540 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manus ad Avem</title>
-    <!-- MediaPipe Hands Dependencies -->
+    <title>Bird Synthesizer</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-    
+
     <style>
         :root {
-            --bg-color: #0d0b08;
-            --surface: #0d0b08;
-            --text-main: #e8d9b0;
-            --text-muted: #a08840;
-            --primary: #c8922a; 
-            --secondary: #4a8a6f; 
-            --highlight: #f0d080;
-            --border: #c8922a;
-            --shadow: #1a1408;
-            --font-serif: "Palatino Linotype", "Book Antiqua", Palatino, serif;
-            --font-sans: var(--font-serif);
+            --bg:          #0d0b08;
+            --surface:     rgba(13, 11, 8, 0.90);
+            --text:        #e8d9b0;
+            --muted:       #a08840;
+            --primary:     #c8922a;
+            --secondary:   #4a8a6f;
+            --highlight:   #f0d080;
+            --border:      #c8922a;
+            --border-dim:  rgba(200, 146, 42, 0.25);
+            --font-serif:  "Palatino Linotype", "Book Antiqua", Palatino, serif;
+            --font-mono:   "Courier New", Courier, monospace;
+            --topbar-h:    42px;
+            --sidebar-w:   292px;
         }
 
-        body {
-            margin: 0;
-            padding: 40px 20px;
-            background-color: var(--bg-color);
-            background-image: radial-gradient(circle at center, #15110d 0%, #0d0b08 100%);
-            color: var(--text-main);
-            font-family: var(--font-serif);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            line-height: 1.5;
-        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        .header {
-            text-align: center;
-            margin-bottom: 40px;
-            max-width: 600px;
-        }
-
-        .header h1 { 
-            margin: 0 0 12px 0; 
-            font-size: 32px; 
-            font-family: var(--font-serif);
-            font-weight: 400;
-            letter-spacing: 0.05em;
-            color: var(--highlight);
-            font-variant: small-caps;
-        }
-        .header p { 
-            margin: 0; 
-            color: var(--text-muted); 
-            font-size: 16px;
-            font-style: italic;
-        }
-
-        .app-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 24px;
-            width: 100%;
-            max-width: 960px;
-            justify-content: center;
-        }
-
-        .panel {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            padding: 24px;
-            box-shadow: inset 0 0 0 4px var(--shadow), inset 0 0 0 6px var(--border), 0 8px 24px rgba(0,0,0,0.8);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            position: relative;
-        }
-
-        /* Camera Panel */
-        .camera-panel {
-            flex: 1 1 450px;
-            position: relative;
-            min-height: 350px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 12px;
-        }
-
-        .camera-wrapper {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            border-radius: 2px;
+        html, body {
+            width: 100%; height: 100%;
             overflow: hidden;
-            border: 1px solid var(--shadow);
-            box-shadow: inset 0 0 0 4px var(--shadow), inset 0 0 0 6px var(--border);
+            background: var(--bg);
+            font-family: var(--font-serif);
+            color: var(--text);
         }
 
-        /* Ticks Top & Bottom */
-        .camera-ticks {
+        /* ── Camera panel ── */
+        #videoElement { display: none; }
+
+        #cameraPanel {
+            position: fixed;
+            top: var(--topbar-h);
+            left: 0;
+            width: calc(100vw - var(--sidebar-w));
+            height: calc(100vh - var(--topbar-h));
+            z-index: 4;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border-dim);
+            border-top: none;
+            border-left: none;
+            overflow: hidden;
+            min-width: 200px;
+            min-height: 150px;
+        }
+        .panel-titlebar {
+            height: 26px;
+            background: rgba(13, 11, 8, 0.96);
+            border-bottom: 1px solid var(--border-dim);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 10px;
+            cursor: grab;
+            flex-shrink: 0;
+            user-select: none;
+            font-family: var(--font-mono);
+            font-size: 9px;
+            color: var(--muted);
+            letter-spacing: 0.15em;
+        }
+        .panel-titlebar:active { cursor: grabbing; }
+        .panel-titlebar .accent { color: var(--primary); margin-right: 5px; }
+        .panel-body {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        #outputCanvas {
             position: absolute;
-            left: 12px; right: 12px;
-            height: 6px;
-            background: 
-                repeating-linear-gradient(to right, var(--border) 0, var(--border) 2px, transparent 2px, transparent 40px),
-                repeating-linear-gradient(to right, var(--border) 0, var(--border) 1px, transparent 1px, transparent 20px);
-            background-size: 100% 6px, 100% 3px;
-            background-repeat: no-repeat;
-            background-position: left bottom, left bottom;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: block;
+            transform: scaleX(-1);
+        }
+
+        /* ── Atmosphere (inside panel-body) ── */
+        .scanlines {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 2;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                to bottom,
+                transparent 0px,
+                transparent 3px,
+                rgba(0, 0, 0, 0.07) 3px,
+                rgba(0, 0, 0, 0.07) 4px
+            );
+        }
+        .grid-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 2;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(200, 146, 42, 0.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(200, 146, 42, 0.035) 1px, transparent 1px);
+            background-size: 52px 52px;
+        }
+        .vignette {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 3;
+            pointer-events: none;
+            background: radial-gradient(ellipse at 38% 50%, transparent 30%, rgba(13, 11, 8, 0.72) 100%);
+        }
+
+        /* ── Corner brackets (inside panel-body) ── */
+        .corner {
+            position: absolute;
+            width: 32px; height: 32px;
             z-index: 5;
+            pointer-events: none;
         }
-        .camera-ticks.top { top: 12px; transform: scaleY(-1); }
-        .camera-ticks.bottom { bottom: 12px; }
-
-        /* Corner Brackets */
-        .bracket {
-            position: absolute;
-            width: 24px;
-            height: 24px;
-            z-index: 10;
-        }
-        .bracket::before, .bracket::after {
+        .corner::before, .corner::after {
             content: '';
             position: absolute;
-            background-color: var(--border);
+            background: var(--primary);
+            opacity: 0.9;
         }
-        .bracket::before { width: 100%; height: 2px; }
-        .bracket::after { width: 2px; height: 100%; }
+        .corner::before { width: 100%; height: 2px; }
+        .corner::after  { width: 2px;  height: 100%; }
+        .corner.tl { top: 10px; left: 10px; }
+        .corner.tl::before { top: 0; left: 0; }
+        .corner.tl::after  { top: 0; left: 0; }
+        .corner.tr { top: 10px; right: 10px; }
+        .corner.tr::before { top: 0; right: 0; }
+        .corner.tr::after  { top: 0; right: 0; }
+        .corner.bl { bottom: 10px; left: 10px; }
+        .corner.bl::before { bottom: 0; left: 0; }
+        .corner.bl::after  { bottom: 0; left: 0; }
+        .corner.br { bottom: 10px; right: 10px; }
+        .corner.br::before { bottom: 0; right: 0; }
+        .corner.br::after  { bottom: 0; right: 0; }
 
-        .bracket.tl { top: 12px; left: 12px; }
-        .bracket.tl::before { top: 0; left: 0; }
-        .bracket.tl::after { top: 0; left: 0; }
-        
-        .bracket.tr { top: 12px; right: 12px; }
-        .bracket.tr::before { top: 0; right: 0; }
-        .bracket.tr::after { top: 0; right: 0; }
-        
-        .bracket.bl { bottom: 12px; left: 12px; }
-        .bracket.bl::before { bottom: 0; left: 0; }
-        .bracket.bl::after { bottom: 0; left: 0; }
-        
-        .bracket.br { bottom: 12px; right: 12px; }
-        .bracket.br::before { bottom: 0; right: 0; }
-        .bracket.br::after { bottom: 0; right: 0; }
-
-        .mirrored { transform: scaleX(-1); }
-        #videoElement { display: none; }
-        #outputCanvas {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
+        /* ── Resize handle (camera panel corner) ── */
+        .resize-corner {
+            position: absolute;
+            bottom: 0; right: 0;
+            width: 16px; height: 16px;
+            cursor: nwse-resize;
+            z-index: 30;
         }
+        .resize-corner::before, .resize-corner::after {
+            content: '';
+            position: absolute;
+            background: var(--border-dim);
+        }
+        .resize-corner::before { width: 2px; height: 10px; bottom: 3px; right: 5px; }
+        .resize-corner::after  { width: 10px; height: 2px; bottom: 5px; right: 3px; }
 
-        /* Dashboard Panel */
-        .dashboard-panel {
-            flex: 1 1 300px;
+        /* ── Sidebar resize handle ── */
+        .sidebar-resize-handle {
+            position: absolute;
+            top: 0; left: -4px;
+            width: 8px; height: 100%;
+            cursor: ew-resize;
+            z-index: 20;
+            border-radius: 2px;
+            transition: background 0.15s;
+        }
+        .sidebar-resize-handle:hover { background: rgba(200, 146, 42, 0.15); }
+
+        /* ── Top bar ── */
+        .top-bar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: var(--topbar-h);
+            z-index: 15;
+            background: var(--surface);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-dim);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+        }
+        .app-title {
+            font-family: var(--font-serif);
+            font-variant: small-caps;
+            font-size: 15px;
+            letter-spacing: 0.14em;
+            color: var(--highlight);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .app-title .diamond { color: var(--primary); font-size: 10px; }
+        .top-bar-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        #status {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--muted);
+            letter-spacing: 0.1em;
+            transition: color 0.4s;
+        }
+        #status.active { color: var(--secondary); }
+
+        /* ── Right sidebar ── */
+        .sidebar {
+            position: fixed;
+            top: var(--topbar-h);
+            right: 0;
+            width: var(--sidebar-w);
+            height: calc(100vh - var(--topbar-h));
+            z-index: 10;
+            background: var(--surface);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-left: 1px solid var(--border-dim);
             display: flex;
             flex-direction: column;
-            gap: 24px;
+            overflow: hidden;
         }
 
+        /* scrollable inner area */
+        .sidebar-scroll {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        .sidebar-scroll::-webkit-scrollbar { width: 3px; }
+        .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border-dim); border-radius: 2px; }
+
+        /* section header — TD operator-panel style */
+        .s-head {
+            padding: 5px 12px;
+            background: rgba(200, 146, 42, 0.08);
+            border-bottom: 1px solid var(--border-dim);
+            border-top: 1px solid var(--border-dim);
+            font-family: var(--font-mono);
+            font-size: 9px;
+            letter-spacing: 0.2em;
+            color: var(--muted);
+            user-select: none;
+            flex-shrink: 0;
+        }
+        .s-head:first-child { border-top: none; }
+
+        /* Bird display */
         .bird-display {
             display: flex;
             flex-direction: column;
             align-items: center;
-            text-align: center;
+            padding: 18px 12px 14px;
+            gap: 6px;
         }
-
         .bird-display img {
-            width: 140px;
-            height: 140px;
-            object-fit: cover;
+            width: 96px; height: 96px;
             border-radius: 50%;
-            border: 2px solid var(--border);
-            margin-bottom: 12px;
-            background: var(--bg-color);
-            box-shadow: 0 0 12px rgba(200, 146, 42, 0.3);
+            object-fit: cover;
+            border: 1.5px solid var(--border);
+            background: var(--bg);
+            box-shadow: 0 0 20px rgba(200, 146, 42, 0.2), inset 0 0 12px rgba(0,0,0,0.6);
+            transition: src 0.3s;
         }
-
+        .bird-display h2 {
+            font-size: 15px;
+            font-weight: 400;
+            color: var(--highlight);
+            text-align: center;
+            font-variant: small-caps;
+            letter-spacing: 0.06em;
+            margin-top: 4px;
+        }
         .divider {
             display: flex;
             align-items: center;
-            width: 120px;
+            width: 72px;
             color: var(--border);
-            margin: 4px 0 12px 0;
+            margin: 2px 0;
         }
-        .divider .line { flex: 1; height: 1px; background: var(--border); }
-        .divider .diamond { margin: 0 8px; font-size: 10px; }
-
-        .bird-display h2 { 
-            margin: 0; 
-            font-size: 22px; 
-            font-weight: 400;
-            color: var(--highlight);
-        }
-        .bird-display p { 
-            margin: 0; 
-            color: var(--text-muted); 
-            font-size: 14px; 
+        .divider .line { flex: 1; height: 1px; background: var(--border); opacity: 0.6; }
+        .divider .diamond { margin: 0 6px; font-size: 7px; opacity: 0.8; }
+        .bird-display p {
+            font-size: 11px;
+            color: var(--muted);
             font-style: italic;
+            text-align: center;
         }
 
-        canvas#waveformCanvas {
-            width: 100%;
-            height: 120px;
-            background: #0a0905;
-            border-radius: 2px;
-            border: 1px solid var(--border);
+        /* Parameters — TD param-panel style */
+        .params { padding: 2px 0 4px; }
+        .param-row {
+            display: flex;
+            align-items: center;
+            padding: 7px 12px;
+            gap: 8px;
+            border-bottom: 1px solid rgba(200, 146, 42, 0.06);
+        }
+        .param-row:hover { background: rgba(200, 146, 42, 0.04); }
+        .param-label {
+            font-family: var(--font-mono);
+            font-size: 9px;
+            color: var(--muted);
+            letter-spacing: 0.12em;
+            width: 46px;
+            flex-shrink: 0;
+        }
+        .param-track {
+            flex: 1;
+            height: 2px;
+            background: rgba(200, 146, 42, 0.14);
+            border-radius: 1px;
+            overflow: hidden;
+        }
+        .param-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--primary);
+            border-radius: 1px;
+            transition: width 0.06s linear;
+        }
+        .param-fill.green { background: var(--secondary); }
+        .param-value {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--highlight);
+            text-align: right;
+            min-width: 54px;
+            flex-shrink: 0;
+        }
+        .param-value.mode-label {
+            color: var(--primary);
+            letter-spacing: 0.05em;
         }
 
+        /* Controls */
+        .controls {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
         button {
             background: transparent;
             color: var(--highlight);
             border: 1px solid var(--border);
-            padding: 10px 24px;
+            padding: 9px 16px;
             border-radius: 2px;
-            font-size: 15px;
-            font-weight: 500;
+            font-size: 12px;
             cursor: pointer;
-            transition: all 0.2s;
             font-family: var(--font-serif);
+            font-variant: small-caps;
             letter-spacing: 0.1em;
-            font-variant: small-caps;
-        }
-        button:hover { 
-            background: var(--border); 
-            color: var(--bg-color); 
-        }
-        button:active { transform: scale(0.98); }
-        
-        #status { font-style: italic; color: var(--text-muted); margin-bottom: 10px; }
-
-        /* Diagnostics Section */
-        .diagnostics-panel {
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
             width: 100%;
-            max-width: 960px;
-            margin-top: 60px;
-            background: #080604;
-            border: 1px solid #3a2e10;
-            border-radius: 2px;
-            padding: 24px;
-            color: var(--text-main);
-            font-family: monospace;
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
-            position: relative;
+            text-align: left;
         }
-        .diagnostics-panel h3 {
-            color: var(--highlight);
-            margin: 0 0 15px 0;
-            font-variant: small-caps;
-            font-family: var(--font-serif);
-            font-weight: 400;
+        button::before { content: '▶  '; font-size: 8px; opacity: 0.7; }
+        button:hover { background: rgba(200, 146, 42, 0.18); }
+        button:active { transform: scale(0.985); }
+        #noBirdCallMsg {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: #8a3030;
+            letter-spacing: 0.05em;
+            padding: 2px 0;
+            display: none;
         }
-        
+
+        /* Waveform */
+        .waveform-wrap { padding: 10px 12px 6px; }
+        canvas#waveformCanvas {
+            width: 100%;
+            height: 76px;
+            display: block;
+            background: rgba(8, 7, 4, 0.85);
+            border: 1px solid var(--border-dim);
+            border-radius: 1px;
+        }
+        .wave-legend {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 7px;
+            font-family: var(--font-mono);
+            font-size: 9px;
+            color: var(--muted);
+            letter-spacing: 0.06em;
+        }
+
+        /* Diagnostics — fixed height at bottom of sidebar */
+        .diag-outer {
+            flex: 0 0 90px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
         #diagnosticLog {
-            max-height: 200px;
+            flex: 1;
             overflow-y: auto;
-            border-top: 1px solid #3a2e10;
-            padding-top: 15px;
+            padding: 4px 0 8px;
         }
-
-        .log-line { margin: 6px 0; font-size: 13px; font-family: var(--font-serif); }
+        #diagnosticLog::-webkit-scrollbar { width: 3px; }
+        #diagnosticLog::-webkit-scrollbar-thumb { background: var(--border-dim); }
+        .log-line {
+            padding: 2px 12px;
+            font-family: var(--font-mono);
+            font-size: 9px;
+            line-height: 1.5;
+            color: var(--muted);
+        }
         .log-pass { color: var(--secondary); }
-        .log-fail { color: #8a2a2a; }
-        .log-info { color: var(--text-muted); }
-        
-        #testGrid { display: none; } /* Hidden but functional for logic */
+        .log-fail { color: #8a3030; }
+        .log-info { color: var(--muted); }
 
+        #testGrid { display: none; }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <h1>Manus ad Avem &mdash; Astrological Synthesizer</h1>
-        <p>Prima manus: forma digitorum ad sonum. Secunda manus: magnitudo sphaerae (volumen).</p>
+    <video id="videoElement" autoplay playsinline></video>
+
+    <!-- camera panel — draggable + resizable -->
+    <div id="cameraPanel">
+        <div class="panel-titlebar" id="cameraDragHandle">
+            <span><span class="accent">◆</span> CAMERA</span>
+            <span id="panelSizeLabel">— × —</span>
+        </div>
+        <div class="panel-body">
+            <canvas id="outputCanvas" width="640" height="480"></canvas>
+            <div class="scanlines"></div>
+            <div class="grid-overlay"></div>
+            <div class="vignette"></div>
+            <div class="corner tl"></div>
+            <div class="corner tr"></div>
+            <div class="corner bl"></div>
+            <div class="corner br"></div>
+            <div class="resize-corner" id="cameraResizeHandle"></div>
+        </div>
     </div>
 
-    <div class="app-container">
-        <!-- Camera View -->
-        <div class="panel camera-panel">
-            <div id="status">Instrumentum iniciat...</div>
-            <div class="bracket tl"></div>
-            <div class="bracket tr"></div>
-            <div class="bracket bl"></div>
-            <div class="bracket br"></div>
-            <div class="camera-ticks top"></div>
-            <div class="camera-ticks bottom"></div>
-            <div class="camera-wrapper">
-                <video id="videoElement" class="mirrored" autoplay playsinline></video>
-                <canvas id="outputCanvas" class="mirrored" width="640" height="480"></canvas>
-            </div>
+    <!-- top bar -->
+    <div class="top-bar">
+        <span class="app-title">
+            <span class="diamond">◆</span>
+            Bird Synthesizer
+        </span>
+        <div class="top-bar-right">
+            <span id="status">● INITIALIZING</span>
         </div>
+    </div>
 
-        <!-- Dashboard View -->
-        <div class="panel dashboard-panel">
-            <button id="audioBtn" onclick="enableAudio()">Enable Audio Synthesis</button>
-            
+    <!-- right sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-resize-handle" id="sidebarResizeHandle"></div>
+
+        <!-- scrollable upper sections -->
+        <div class="sidebar-scroll">
+
+            <div class="s-head">MATCHED BIRD</div>
             <div class="bird-display">
-                <img id="mainBirdImage" crossorigin="anonymous" src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 24 24' fill='%23c8922a'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z'/%3E%3C/svg%3E" alt="Bird" />
+                <img id="mainBirdImage" crossorigin="anonymous"
+                    src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 24 24' fill='%23c8922a'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z'/%3E%3C/svg%3E"
+                    alt="Bird" />
                 <h2 id="mainBirdName">Waiting for hand...</h2>
                 <div class="divider">
                     <span class="line"></span>
                     <span class="diamond">◆</span>
                     <span class="line"></span>
                 </div>
-                <p>Closest matched celestial profile</p>
+                <p>Closest waveform match</p>
             </div>
 
-            <div style="width: 100%;">
-                <p style="margin: 0 0 8px 0; font-size: 14px; color: var(--highlight); font-variant: small-caps;">Live Hand Waveform</p>
+            <div class="s-head">AUDIO ENGINE</div>
+            <div class="controls">
+                <button id="audioBtn" onclick="enableAudio()">Enable Audio</button>
+                <button id="modeBtn" onclick="toggleMode()" style="display:none">Mode: Synthesis</button>
+                <p id="noBirdCallMsg">No bird call available</p>
+            </div>
+
+            <div class="s-head">WAVEFORM</div>
+            <div class="waveform-wrap">
                 <canvas id="waveformCanvas"></canvas>
-                <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-top: 8px;">
-                    <span><strong style="color: var(--highlight)">—</strong> Forma Digitorum</span>
-                    <span><strong style="color: var(--secondary)">- -</strong> Astrum Scopus</span>
+                <div class="wave-legend">
+                    <span><span style="color:var(--highlight)">—</span>&nbsp; Hand Shape</span>
+                    <span><span style="color:var(--secondary)">- -</span>&nbsp; Bird Target</span>
                 </div>
             </div>
+
+            <div class="s-head">PARAMETERS</div>
+            <div class="params">
+                <div class="param-row">
+                    <span class="param-label">FREQ</span>
+                    <div class="param-track"><div class="param-fill" id="bar-freq"></div></div>
+                    <span class="param-value" id="readout-freq">— Hz</span>
+                </div>
+                <div class="param-row">
+                    <span class="param-label">PITCH</span>
+                    <div class="param-track"><div class="param-fill" id="bar-pitch"></div></div>
+                    <span class="param-value" id="readout-pitch">1.00×</span>
+                </div>
+                <div class="param-row">
+                    <span class="param-label">VOLUME</span>
+                    <div class="param-track"><div class="param-fill" id="bar-vol"></div></div>
+                    <span class="param-value" id="readout-vol">0.00</span>
+                </div>
+                <div class="param-row">
+                    <span class="param-label">HANDS</span>
+                    <div class="param-track"><div class="param-fill green" id="bar-hands"></div></div>
+                    <span class="param-value" id="readout-hands">0 / 2</span>
+                </div>
+                <div class="param-row">
+                    <span class="param-label">MODE</span>
+                    <div class="param-track"></div>
+                    <span class="param-value mode-label" id="readout-mode">SYNTH</span>
+                </div>
+            </div>
+
         </div>
+
+        <!-- diagnostics pinned to bottom, scrolls independently -->
+        <div class="diag-outer">
+            <div class="s-head">DIAGNOSTICS</div>
+            <div id="diagnosticLog">
+                <div class="log-line log-info">Starting asset verification...</div>
+            </div>
+        </div>
+
     </div>
 
-    <!-- Hidden Grid for Logic -->
     <div id="testGrid"></div>
-
-    <!-- Diagnostics Section -->
-    <div class="diagnostics-panel">
-        <h3>System Diagnostics & Asset Verification</h3>
-        <div id="diagnosticLog">
-            <div class="log-line log-info">Starting background asset validation...</div>
-        </div>
-    </div>
 
     <script>
         // --- Logging Utility ---
@@ -354,11 +559,11 @@
         ];
 
         const birdDatabase = birdNames.map((name, i) => {
-            let index = (i * 17) % 243; 
+            let index = (i * 17) % 243;
             let wave = [];
             for(let j = 0; j < 5; j++) {
                 let digit = index % 3;
-                wave.push(0.2 + (digit * 0.3)); 
+                wave.push(0.2 + (digit * 0.3));
                 index = Math.floor(index / 3);
             }
             const types = ['sine', 'triangle', 'sawtooth', 'square'];
@@ -371,10 +576,13 @@
             };
         });
 
+        const AUDIO_BASE_PATH = 'audio/birds/';
+        const MAX_CLIPS_PER_BIRD = 3;
+
         // --- 2. Robust Image Retrieval & Memory Caching ---
-        const imageCache = {}; 
+        const imageCache = {};
         let loadedCount = 0;
-        
+
         function getBirdColor(name) {
             let hash = 0;
             for (let i = 0; i < name.length; i++) { hash = name.charCodeAt(i) + ((hash << 5) - hash); }
@@ -390,7 +598,7 @@
         function cacheImageObject(name, src, isSuccess) {
             return new Promise((resolve) => {
                 const img = new Image();
-                img.crossOrigin = "anonymous"; 
+                img.crossOrigin = "anonymous";
                 img.onload = () => {
                     const c = document.createElement('canvas');
                     c.width = img.naturalWidth;
@@ -417,7 +625,7 @@
         }
 
         async function fetchAllBirds() {
-            sysLog(`Initiating verification for ${birdDatabase.length} assets...`, "info");
+            sysLog(`Verifying ${birdDatabase.length} bird assets...`, "info");
             for (const bird of birdDatabase) {
                 try {
                     const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(bird.name)}`);
@@ -435,36 +643,44 @@
                 }
                 loadedCount++;
             }
-            sysLog(`Database Verification Complete. ${loadedCount} assets cached.`, "pass");
+            sysLog(`Verification complete. ${loadedCount} assets cached.`, "pass");
         }
         fetchAllBirds();
+        const prefetchPromise = prefetchAllBirdAudio();
 
         // --- 3. Audio & UI Logic ---
         let audioCtx;
         let mainOsc = null;
         let mainGain = null;
+        let birdCallGain = null;
         let audioEnabled = false;
-        let currentHandWave = [0.5, 0.5, 0.5, 0.5, 0.5]; 
+        let currentHandWave = [0.5, 0.5, 0.5, 0.5, 0.5];
         let currentBestBird = birdDatabase[0];
 
         function enableAudio() {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             if (audioCtx.state === 'suspended') audioCtx.resume();
-            
+
             if (!mainOsc) {
                 mainGain = audioCtx.createGain();
-                mainGain.gain.value = 0; 
+                mainGain.gain.value = 0;
                 mainGain.connect(audioCtx.destination);
+
+                birdCallGain = audioCtx.createGain();
+                birdCallGain.gain.value = 0;
+                birdCallGain.connect(audioCtx.destination);
 
                 mainOsc = audioCtx.createOscillator();
                 mainOsc.type = 'sine';
                 mainOsc.connect(mainGain);
                 mainOsc.start();
             }
-            
+
             audioEnabled = true;
             document.getElementById('audioBtn').style.display = 'none';
+            document.getElementById('modeBtn').style.display = 'block';
             sysLog("Audio synthesis engine enabled.", "pass");
+            decodeAllBirdAudio();
         }
 
         function updateMainUI(bird) {
@@ -480,7 +696,7 @@
         function updateSynthesizer(bird, pitchMultiplier = 1.0, isActive = false, volume = 0.1) {
             if (!audioEnabled || !mainOsc) return;
             const now = audioCtx.currentTime;
-            
+
             if (isActive) {
                 mainOsc.type = bird.type;
                 const targetFreq = bird.freq * pitchMultiplier;
@@ -505,7 +721,158 @@
             return bestMatch;
         }
 
-        // --- 4. Waveform Drawing ---
+        // --- 4. Bird Call Mode ---
+
+        let currentMode = 'synth';
+        const rawAudioCache = {};
+        const audioBufferCache = {};
+        let decodeReady = false;
+        let currentBirdCallSource = null;
+        let currentPlayingBirdId = null;
+
+        function getBirdSlug(name) {
+            return name.toLowerCase().replace(/[\s\-]+/g, '_');
+        }
+
+        async function fetchWithTimeout(url, ms = 5000) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), ms);
+            try {
+                const resp = await fetch(url, { signal: controller.signal });
+                clearTimeout(timer);
+                return resp;
+            } catch (e) {
+                clearTimeout(timer);
+                throw e;
+            }
+        }
+
+        async function prefetchAllBirdAudio() {
+            sysLog(`Prefetching audio for ${birdDatabase.length} birds...`, 'info');
+            let fetched = 0;
+            const promises = birdDatabase.map(async (bird) => {
+                const birdSlug = getBirdSlug(bird.name);
+                const buffers = [];
+                for (let i = 1; i <= MAX_CLIPS_PER_BIRD; i++) {
+                    let loaded = false;
+                    for (const ext of ['.mp3', '.ogg']) {
+                        try {
+                            const resp = await fetchWithTimeout(`${AUDIO_BASE_PATH}${birdSlug}/${i}${ext}`);
+                            if (!resp.ok) continue;
+                            buffers.push(await resp.arrayBuffer());
+                            loaded = true;
+                            break;
+                        } catch (e) {
+                            if (e.name === 'AbortError') sysLog(`Fetch timeout: ${birdSlug}/${i}${ext}`, 'fail');
+                            continue;
+                        }
+                    }
+                    if (!loaded) break;
+                }
+                if (buffers.length > 0) {
+                    rawAudioCache[birdSlug] = buffers;
+                    fetched++;
+                    sysLog(`Prefetched: ${birdSlug} (${buffers.length} clip${buffers.length > 1 ? 's' : ''})`, 'pass');
+                }
+            });
+            await Promise.all(promises);
+            sysLog(`Audio prefetch complete: ${fetched}/${birdDatabase.length} birds cached.`, fetched > 0 ? 'pass' : 'fail');
+        }
+
+        async function decodeAllBirdAudio() {
+            if (!audioCtx) return;
+            await prefetchPromise.catch(e => sysLog(`Prefetch promise rejected: ${e.message}`, 'fail'));
+            const rawKeys = Object.keys(rawAudioCache);
+            sysLog(`Decode starting — ${rawKeys.length} birds: ${rawKeys.join(', ') || 'none'}`, 'info');
+            let decoded = 0;
+            const promises = Object.entries(rawAudioCache).map(async ([birdSlug, arrayBuffers]) => {
+                const audioBufs = [];
+                for (const ab of arrayBuffers) {
+                    try {
+                        audioBufs.push(await audioCtx.decodeAudioData(ab.slice(0)));
+                    } catch (e) {
+                        sysLog(`Decode FAILED for ${birdSlug}: ${e.message}`, 'fail');
+                    }
+                }
+                if (audioBufs.length > 0) {
+                    audioBufferCache[birdSlug] = audioBufs;
+                    decoded++;
+                } else {
+                    sysLog(`No usable buffers for ${birdSlug} after decode`, 'fail');
+                }
+            });
+            await Promise.all(promises);
+            decodeReady = true;
+            sysLog(`Bird calls decoded: ${decoded} birds ready for playback.`, decoded > 0 ? 'pass' : 'fail');
+        }
+
+        function getRandomBuffer(birdName) {
+            const bufs = audioBufferCache[getBirdSlug(birdName)];
+            if (!bufs || bufs.length === 0) return null;
+            return bufs[Math.floor(Math.random() * bufs.length)];
+        }
+
+        function stopBirdCall() {
+            if (currentBirdCallSource) {
+                try { currentBirdCallSource.stop(); } catch (e) {}
+                currentBirdCallSource.disconnect();
+                currentBirdCallSource = null;
+            }
+        }
+
+        function playBirdCall(bird, pitchMultiplier = 1.0, volume = 0.1) {
+            if (!audioEnabled || !audioCtx || !decodeReady) return;
+            if (currentPlayingBirdId === bird.id) return;
+
+            stopBirdCall();
+
+            const buffer = getRandomBuffer(bird.name);
+            if (!buffer) return;
+
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.playbackRate.value = Math.max(0.1, pitchMultiplier);
+            source.connect(birdCallGain);
+            birdCallGain.gain.cancelScheduledValues(audioCtx.currentTime);
+            birdCallGain.gain.setValueAtTime(volume, audioCtx.currentTime);
+            source.start();
+            source.onended = () => {
+                if (currentBirdCallSource === source) currentBirdCallSource = null;
+            };
+
+            currentBirdCallSource = source;
+            currentPlayingBirdId = bird.id;
+        }
+
+        function toggleMode() {
+            currentMode = currentMode === 'synth' ? 'birdcall' : 'synth';
+            const btn = document.getElementById('modeBtn');
+            document.getElementById('readout-mode').textContent = currentMode === 'birdcall' ? 'BIRD CALLS' : 'SYNTH';
+            if (currentMode === 'birdcall') {
+                btn.textContent = 'Mode: Bird Calls';
+                btn.style.color = 'var(--secondary)';
+                btn.style.borderColor = 'var(--secondary)';
+                if (mainGain && audioCtx) {
+                    mainGain.gain.cancelScheduledValues(audioCtx.currentTime);
+                    mainGain.gain.setValueAtTime(0, audioCtx.currentTime);
+                }
+            } else {
+                btn.textContent = 'Mode: Synthesis';
+                btn.style.color = '';
+                btn.style.borderColor = '';
+                stopBirdCall();
+                currentPlayingBirdId = null;
+                noBirdCallMsg.style.display = 'none';
+                if (birdCallGain && audioCtx) {
+                    birdCallGain.gain.cancelScheduledValues(audioCtx.currentTime);
+                    birdCallGain.gain.setValueAtTime(0, audioCtx.currentTime);
+                }
+            }
+        }
+
+        const noBirdCallMsg = document.getElementById('noBirdCallMsg');
+
+        // --- 5. Waveform Drawing ---
         const waveCanvas = document.getElementById('waveformCanvas');
         const waveCtx = waveCanvas.getContext('2d');
 
@@ -524,14 +891,14 @@
             if (isDashed) ctx.setLineDash([5, 5]);
             else ctx.setLineDash([]);
 
-            const numRepeats = 3; 
+            const numRepeats = 3;
             const stepX = width / ((waveData.length * numRepeats) - 1);
 
             for (let r = 0; r < numRepeats; r++) {
                 for (let i = 0; i < waveData.length; i++) {
                     const x = (r * waveData.length + i) * stepX;
                     const padding = height * 0.15;
-                    const y = padding + ((1 - waveData[i]) * (height - (padding * 2))); 
+                    const y = padding + ((1 - waveData[i]) * (height - (padding * 2)));
                     if (r === 0 && i === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
                 }
@@ -544,15 +911,15 @@
             const rect = waveCanvas.getBoundingClientRect();
             if (rect.width === 0) return;
             waveCtx.clearRect(0, 0, rect.width, rect.height);
-            waveCtx.fillStyle = '#0a0905';
+            waveCtx.fillStyle = '#080704';
             waveCtx.fillRect(0, 0, rect.width, rect.height);
-            
-            waveCtx.strokeStyle = '#2a2010';
+
+            waveCtx.strokeStyle = '#1e1808';
             waveCtx.lineWidth = 1;
             waveCtx.beginPath();
-            for(let i=1; i<4; i++) {
-                waveCtx.moveTo(0, (rect.height/4) * i);
-                waveCtx.lineTo(rect.width, (rect.height/4) * i);
+            for(let i = 1; i < 4; i++) {
+                waveCtx.moveTo(0, (rect.height / 4) * i);
+                waveCtx.lineTo(rect.width, (rect.height / 4) * i);
             }
             waveCtx.stroke();
 
@@ -560,16 +927,27 @@
             drawWaveform(waveCtx, currentHandWave, '#f0d080', 2, rect.width, rect.height, false);
         }
 
-        // --- 5. MediaPipe Hands Logic ---
+        // --- 6. MediaPipe Hands Logic ---
         const videoElement = document.getElementById('videoElement');
         const outputCanvas = document.getElementById('outputCanvas');
         const canvasCtx = outputCanvas.getContext('2d');
         const statusText = document.getElementById('status');
 
+        // Cached readout elements
+        const elFreq    = document.getElementById('readout-freq');
+        const elPitch   = document.getElementById('readout-pitch');
+        const elVol     = document.getElementById('readout-vol');
+        const elHands   = document.getElementById('readout-hands');
+        const barFreq   = document.getElementById('bar-freq');
+        const barPitch  = document.getElementById('bar-pitch');
+        const barVol    = document.getElementById('bar-vol');
+        const barHands  = document.getElementById('bar-hands');
+
         function onResults(results) {
-            if (statusText.style.display !== 'none') {
-                statusText.style.display = 'none';
-                resizeWaveCanvas(); 
+            if (!statusText.classList.contains('active')) {
+                statusText.textContent = '● ACTIVE';
+                statusText.classList.add('active');
+                resizeWaveCanvas();
                 sysLog("Video stream and hand tracking initialized.", "pass");
             }
 
@@ -577,10 +955,13 @@
             canvasCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
             canvasCtx.drawImage(results.image, 0, 0, outputCanvas.width, outputCanvas.height);
 
-            let currentVolume = 0.05; 
+            let currentVolume = currentMode === 'birdcall' ? 0.8 : 0.05;
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                
+
+                elHands.textContent = results.multiHandLandmarks.length + ' / 2';
+                barHands.style.width = (results.multiHandLandmarks.length / 2 * 100) + '%';
+
                 // --- HAND 2: Volume Control & Hologram ---
                 if (results.multiHandLandmarks.length > 1) {
                     const displayLandmarks = results.multiHandLandmarks[1];
@@ -590,9 +971,11 @@
                     const thumbY = thumb.y * outputCanvas.height;
                     const pinkyX = pinky.x * outputCanvas.width;
                     const pinkyY = pinky.y * outputCanvas.height;
-                    
+
                     const dist = Math.hypot(thumbX - pinkyX, thumbY - pinkyY);
-                    currentVolume = Math.min(Math.max(dist / 600, 0.02), 0.5);
+                    currentVolume = currentMode === 'birdcall'
+                        ? Math.min(Math.max(dist / 300, 0.1), 1.0)
+                        : Math.min(Math.max(dist / 600, 0.02), 0.5);
 
                     const centerX = (thumbX + pinkyX) / 2;
                     const centerY = (thumbY + pinkyY) / 2;
@@ -636,14 +1019,34 @@
                     let maxY = Math.max(...tips.map(t => t.y));
                     let range = maxY - minY || 0.01;
                     let centerY = (minY + maxY) / 2;
-                    
+
                     currentHandWave = tips.map(p => 1 - ((p.y - minY) / range));
                     currentBestBird = findClosestBird(currentHandWave);
-                    
+
                     const pitchMultiplier = Math.pow(2, (0.5 - centerY) * 2.5);
-                    
+
                     updateMainUI(currentBestBird);
-                    updateSynthesizer(currentBestBird, pitchMultiplier, true, currentVolume);
+
+                    // live parameter readouts
+                    elFreq.textContent  = currentBestBird.freq + ' Hz';
+                    barFreq.style.width = ((currentBestBird.freq - 400) / 2600 * 100).toFixed(1) + '%';
+                    elPitch.textContent = pitchMultiplier.toFixed(2) + '×';
+                    barPitch.style.width = (Math.min(pitchMultiplier / 5.66, 1) * 100).toFixed(1) + '%';
+                    elVol.textContent   = currentVolume.toFixed(2);
+                    barVol.style.width  = (Math.min(currentVolume * 2, 1) * 100).toFixed(1) + '%';
+
+                    if (currentMode === 'synth') {
+                        updateSynthesizer(currentBestBird, pitchMultiplier, true, currentVolume);
+                    } else {
+                        if (currentBirdCallSource && audioCtx) {
+                            birdCallGain.gain.linearRampToValueAtTime(currentVolume, audioCtx.currentTime + 0.05);
+                            currentBirdCallSource.playbackRate.linearRampToValueAtTime(
+                                Math.max(0.1, pitchMultiplier), audioCtx.currentTime + 0.05
+                            );
+                        }
+                        playBirdCall(currentBestBird, pitchMultiplier, currentVolume);
+                        noBirdCallMsg.style.display = (audioEnabled && !getRandomBuffer(currentBestBird.name)) ? 'block' : 'none';
+                    }
 
                     // AR Curves
                     const drawARWaveOnFingers = (waveData, color, isDashed, lineWidth, hasShadow) => {
@@ -654,14 +1057,14 @@
                         if (hasShadow) { canvasCtx.shadowColor = '#c8922a'; canvasCtx.shadowBlur = 10; }
                         for (let i = 0; i < tips.length; i++) {
                             const screenX = tips[i].x * outputCanvas.width;
-                            const screenY = hasShadow ? 
-                                (tips[i].y * outputCanvas.height) : 
+                            const screenY = hasShadow ?
+                                (tips[i].y * outputCanvas.height) :
                                 ((minY + (1 - waveData[i]) * range) * outputCanvas.height);
                             if (i === 0) canvasCtx.moveTo(screenX, screenY);
                             else {
                                 const prevX = tips[i-1].x * outputCanvas.width;
-                                const prevY = hasShadow ? 
-                                    (tips[i-1].y * outputCanvas.height) : 
+                                const prevY = hasShadow ?
+                                    (tips[i-1].y * outputCanvas.height) :
                                     ((minY + (1 - waveData[i-1]) * range) * outputCanvas.height);
                                 canvasCtx.quadraticCurveTo((prevX+screenX)/2, (prevY+screenY)/2 - 15, screenX, screenY);
                             }
@@ -674,11 +1077,97 @@
                     drawARWaveOnFingers(currentHandWave, '#f0d080', false, 2, true);
                 }
             } else {
-                updateSynthesizer(null, 1.0, false);
+                elHands.textContent  = '0 / 2';
+                barHands.style.width = '0%';
+                noBirdCallMsg.style.display = 'none';
+                if (currentMode === 'synth') {
+                    updateSynthesizer(null, 1.0, false);
+                } else {
+                    stopBirdCall();
+                    currentPlayingBirdId = null;
+                    if (mainGain && audioCtx) mainGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
+                }
             }
             canvasCtx.restore();
             renderWaveforms();
         }
+
+        // --- 7. Panel Drag & Resize ---
+        const cameraPanel  = document.getElementById('cameraPanel');
+        const sizeLabel    = document.getElementById('panelSizeLabel');
+
+        function updateSizeLabel() {
+            const r = cameraPanel.getBoundingClientRect();
+            sizeLabel.textContent = Math.round(r.width) + ' × ' + Math.round(r.height);
+        }
+
+        // Draggable title bar
+        document.getElementById('cameraDragHandle').addEventListener('mousedown', e => {
+            if (e.target.closest('.resize-corner')) return;
+            const rect = cameraPanel.getBoundingClientRect();
+            // freeze computed size so right/bottom don't fight
+            cameraPanel.style.width  = rect.width  + 'px';
+            cameraPanel.style.height = rect.height + 'px';
+            cameraPanel.style.right  = 'auto';
+            cameraPanel.style.bottom = 'auto';
+            cameraPanel.style.left   = rect.left + 'px';
+            cameraPanel.style.top    = rect.top  + 'px';
+            const ox = e.clientX - rect.left;
+            const oy = e.clientY - rect.top;
+            function onMove(e) {
+                cameraPanel.style.left = (e.clientX - ox) + 'px';
+                cameraPanel.style.top  = (e.clientY - oy) + 'px';
+            }
+            function onUp() {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+            e.preventDefault();
+        });
+
+        // Resizable corner
+        document.getElementById('cameraResizeHandle').addEventListener('mousedown', e => {
+            const rect  = cameraPanel.getBoundingClientRect();
+            const startW = rect.width, startH = rect.height;
+            const startX = e.clientX,  startY = e.clientY;
+            cameraPanel.style.right  = 'auto';
+            cameraPanel.style.bottom = 'auto';
+            cameraPanel.style.left   = rect.left + 'px';
+            cameraPanel.style.top    = rect.top  + 'px';
+            function onMove(e) {
+                cameraPanel.style.width  = Math.max(200, startW + (e.clientX - startX)) + 'px';
+                cameraPanel.style.height = Math.max(150, startH + (e.clientY - startY)) + 'px';
+                updateSizeLabel();
+            }
+            function onUp() {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+            e.preventDefault();
+        });
+
+        // Sidebar resize handle
+        document.getElementById('sidebarResizeHandle').addEventListener('mousedown', e => {
+            const startX = e.clientX;
+            const startW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w'));
+            function onMove(e) {
+                const newW = Math.max(200, Math.min(520, startW + (startX - e.clientX)));
+                document.documentElement.style.setProperty('--sidebar-w', newW + 'px');
+            }
+            function onUp() {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+            e.preventDefault();
+        });
+
+        updateSizeLabel();
 
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
         hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });

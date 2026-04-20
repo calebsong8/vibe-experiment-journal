@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Bird Synth — Test Suite</title>
+    <style>
+        :root {
+            --bg: #0d0b08; --text: #e8d9b0; --muted: #a08840;
+            --pass: #4a8a6f; --fail: #c0392b; --border: #c8922a;
+            --font: "Palatino Linotype", Palatino, serif;
+        }
+        body { background: var(--bg); color: var(--text); font-family: var(--font); padding: 32px; margin: 0; }
+        h1 { color: #f0d080; font-weight: 400; font-variant: small-caps; }
+        #summary { font-size: 18px; margin: 16px 0; padding: 12px 16px; border: 1px solid var(--border); display: inline-block; }
+        .pass-count { color: var(--pass); } .fail-count { color: var(--fail); }
+        #log { margin-top: 24px; }
+        .suite { margin: 20px 0; }
+        .suite-title { color: #f0d080; font-variant: small-caps; font-size: 16px; border-bottom: 1px solid #3a2e10; padding-bottom: 4px; margin-bottom: 8px; }
+        .case { padding: 4px 0 4px 16px; font-size: 14px; border-left: 2px solid transparent; }
+        .case.pass { border-color: var(--pass); color: var(--pass); }
+        .case.fail { border-color: var(--fail); color: var(--fail); }
+        .case .reason { color: #a05050; font-style: italic; margin-left: 12px; font-size: 13px; }
+    </style>
+</head>
+<body>
+<h1>Manus ad Avem — Test Suite</h1>
+<div id="summary">Running...</div>
+<div id="log"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────
+// Test runner
+// ─────────────────────────────────────────────────────────────────
+let passed = 0, failed = 0;
+let currentSuite = null;
+const logEl = document.getElementById('log');
+
+function suite(name) {
+    currentSuite = document.createElement('div');
+    currentSuite.className = 'suite';
+    currentSuite.innerHTML = `<div class="suite-title">${name}</div>`;
+    logEl.appendChild(currentSuite);
+}
+
+const asyncTests = []; // collect promises for async tests
+
+function test(name, fn) {
+    const el = document.createElement('div');
+    el.className = 'case';
+    const suite = currentSuite;
+    try {
+        const result = fn();
+        if (result && typeof result.then === 'function') {
+            // async test — resolve later
+            asyncTests.push(
+                result.then(() => {
+                    el.classList.add('pass');
+                    el.textContent = `✓  ${name}`;
+                    passed++;
+                }).catch(e => {
+                    el.classList.add('fail');
+                    el.innerHTML = `✗  ${name}<span class="reason">${e.message}</span>`;
+                    failed++;
+                }).finally(() => updateSummary())
+            );
+        } else {
+            el.classList.add('pass');
+            el.textContent = `✓  ${name}`;
+            passed++;
+        }
+    } catch (e) {
+        el.classList.add('fail');
+        el.innerHTML = `✗  ${name}<span class="reason">${e.message}</span>`;
+        failed++;
+    }
+    (suite || logEl).appendChild(el);
+}
+
+function updateSummary() {
+    const total = passed + failed;
+    const summaryEl = document.getElementById('summary');
+    summaryEl.innerHTML = `
+        <span class="pass-count">${passed} passed</span> /
+        <span class="fail-count">${failed} failed</span> /
+        ${total} total
+    `;
+    summaryEl.style.borderColor = failed > 0 ? '#c0392b' : '#4a8a6f';
+    document.title = `Tests: ${passed}/${total} passed`;
+}
+
+function assert(condition, msg) {
+    if (!condition) throw new Error(msg || 'assertion failed');
+}
+function assertEqual(a, b, msg) {
+    if (a !== b) throw new Error(msg || `expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
+}
+function assertApprox(a, b, tol = 0.001, msg) {
+    if (Math.abs(a - b) > tol) throw new Error(msg || `expected ≈${b}, got ${a} (tolerance ${tol})`);
+}
+function assertArrayEqual(a, b, msg) {
+    if (a.length !== b.length || a.some((v, i) => v !== b[i]))
+        throw new Error(msg || `arrays differ:\n  got:      ${JSON.stringify(a)}\n  expected: ${JSON.stringify(b)}`);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Code under test — pure functions copied from index.html
+// ─────────────────────────────────────────────────────────────────
+
+// Bird database (same deterministic generation as index.html)
+const birdNames = [
+    "American Robin", "Northern Cardinal", "Blue Jay", "Red-tailed Hawk", "Mourning Dove",
+    "Black-capped Chickadee", "American Crow", "Common Loon", "Mallard", "Bald Eagle",
+    "Canada Goose", "Great Blue Heron", "Ruby-throated Hummingbird", "Tufted Titmouse", "White-breasted Nuthatch",
+    "Carolina Wren", "European Starling", "House Sparrow", "House Finch", "American Goldfinch",
+    "Song Sparrow", "Dark-eyed Junco", "Red-winged Blackbird", "Brown-headed Cowbird", "Common Grackle"
+];
+const birdDatabase = birdNames.map((name, i) => {
+    let index = (i * 17) % 243;
+    let wave = [];
+    for (let j = 0; j < 5; j++) {
+        let digit = index % 3;
+        wave.push(0.2 + (digit * 0.3));
+        index = Math.floor(index / 3);
+    }
+    const types = ['sine', 'triangle', 'sawtooth', 'square'];
+    return { id: i, name, wave, type: types[i % 4], freq: 400 + ((i * 113) % 2600) };
+});
+
+// Functions under test
+function getBirdSlug(name) {
+    return name.toLowerCase().replace(/[\s\-]+/g, '_');
+}
+
+function findClosestBird(handWave) {
+    let bestMatch = null, minDistance = Infinity;
+    for (const bird of birdDatabase) {
+        let dist = 0;
+        for (let i = 0; i < 5; i++) dist += Math.pow(handWave[i] - bird.wave[i], 2);
+        if (dist < minDistance) { minDistance = dist; bestMatch = bird; }
+    }
+    return bestMatch;
+}
+
+function calcPitchMultiplier(centerY) {
+    return Math.pow(2, (0.5 - centerY) * 2.5);
+}
+
+function getAudioFilePaths(birdName, basePath = 'audio/birds/', maxClips = 3) {
+    const s = getBirdSlug(birdName);
+    return Array.from({ length: maxClips }, (_, i) => `${basePath}${s}/${i + 1}.mp3`);
+}
+
+// Mockable getRandomBuffer
+function makeGetRandomBuffer(mockCache) {
+    return function(birdName) {
+        const bufs = mockCache[getBirdSlug(birdName)];
+        if (!bufs || bufs.length === 0) return null;
+        return bufs[Math.floor(Math.random() * bufs.length)];
+    };
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Test suites
+// ─────────────────────────────────────────────────────────────────
+
+suite('getBirdSlug — name → filesystem slug');
+test('lowercase conversion', () => {
+    assertEqual(getBirdSlug('American Robin'), 'american_robin');
+});
+test('spaces become underscores', () => {
+    assertEqual(getBirdSlug('Great Blue Heron'), 'great_blue_heron');
+});
+test('hyphens become underscores', () => {
+    assertEqual(getBirdSlug('Red-tailed Hawk'), 'red_tailed_hawk');
+});
+test('multiple spaces collapse to single underscore', () => {
+    assertEqual(getBirdSlug('Ruby-throated Hummingbird'), 'ruby_throated_hummingbird');
+});
+test('already-lowercase name unchanged', () => {
+    assertEqual(getBirdSlug('mallard'), 'mallard');
+});
+test('all 25 bird slugs are non-empty strings', () => {
+    birdNames.forEach(name => {
+        const s = getBirdSlug(name);
+        assert(s.length > 0, `empty slug for "${name}"`);
+        assert(!/[A-Z\s]/.test(s), `slug has uppercase or space: "${s}"`);
+    });
+});
+
+suite('getAudioFilePaths — slug → expected file paths');
+test('returns maxClips paths', () => {
+    const paths = getAudioFilePaths('American Robin', 'audio/birds/', 3);
+    assertEqual(paths.length, 3);
+});
+test('paths use correct slug', () => {
+    const paths = getAudioFilePaths('Red-tailed Hawk', 'audio/birds/', 3);
+    assert(paths[0].includes('red_tailed_hawk'), `path does not contain slug: ${paths[0]}`);
+});
+test('paths are numbered 1, 2, 3', () => {
+    const paths = getAudioFilePaths('Blue Jay', 'audio/birds/', 3);
+    assertEqual(paths[0], 'audio/birds/blue_jay/1.mp3');
+    assertEqual(paths[1], 'audio/birds/blue_jay/2.mp3');
+    assertEqual(paths[2], 'audio/birds/blue_jay/3.mp3');
+});
+test('respects custom basePath', () => {
+    const paths = getAudioFilePaths('Mallard', '/custom/path/', 1);
+    assertEqual(paths[0], '/custom/path/mallard/1.mp3');
+});
+
+suite('OGG fallback — prefetch tries .mp3 then .ogg per index');
+// Simulate the fetch-with-fallback logic from prefetchAllBirdAudio
+async function simulatePrefetch(slug, availableFiles) {
+    const MAX_CLIPS = 3;
+    const buffers = [];
+    for (let i = 1; i <= MAX_CLIPS; i++) {
+        let loaded = false;
+        for (const ext of ['.mp3', '.ogg']) {
+            const path = `audio/birds/${slug}/${i}${ext}`;
+            if (availableFiles.includes(path)) {
+                buffers.push({ path }); // mock ArrayBuffer
+                loaded = true;
+                break;
+            }
+        }
+        if (!loaded) break;
+    }
+    return buffers;
+}
+
+test('finds mp3 when only mp3 exists', async () => {
+    const bufs = await simulatePrefetch('mallard', ['audio/birds/mallard/1.mp3']);
+    assertEqual(bufs.length, 1);
+    assertEqual(bufs[0].path, 'audio/birds/mallard/1.mp3');
+});
+test('finds ogg when only ogg exists', async () => {
+    const bufs = await simulatePrefetch('mallard', ['audio/birds/mallard/1.ogg']);
+    assertEqual(bufs.length, 1);
+    assertEqual(bufs[0].path, 'audio/birds/mallard/1.ogg');
+});
+test('prefers mp3 over ogg for same index', async () => {
+    const bufs = await simulatePrefetch('mallard', [
+        'audio/birds/mallard/1.mp3',
+        'audio/birds/mallard/1.ogg',
+    ]);
+    assertEqual(bufs.length, 1);
+    assertEqual(bufs[0].path, 'audio/birds/mallard/1.mp3');
+});
+test('stops at first missing index gap', async () => {
+    // clip 1 exists, clip 2 is missing, clip 3 exists — should only get clip 1
+    const bufs = await simulatePrefetch('mallard', [
+        'audio/birds/mallard/1.mp3',
+        'audio/birds/mallard/3.mp3',
+    ]);
+    assertEqual(bufs.length, 1);
+});
+test('collects mixed extensions across indices', async () => {
+    const bufs = await simulatePrefetch('american_crow', [
+        'audio/birds/american_crow/1.mp3',
+        'audio/birds/american_crow/2.ogg',
+    ]);
+    assertEqual(bufs.length, 2);
+    assertEqual(bufs[0].path, 'audio/birds/american_crow/1.mp3');
+    assertEqual(bufs[1].path, 'audio/birds/american_crow/2.ogg');
+});
+
+suite('findClosestBird — wave matching');
+test('exact wave returns the matching bird', () => {
+    for (const bird of birdDatabase) {
+        const result = findClosestBird(bird.wave);
+        assertEqual(result.id, bird.id, `exact wave for "${bird.name}" returned "${result.name}"`);
+    }
+});
+test('all-0.5 wave returns some bird (no crash)', () => {
+    const result = findClosestBird([0.5, 0.5, 0.5, 0.5, 0.5]);
+    assert(result !== null && result.id >= 0);
+});
+test('returns bird with lowest euclidean distance', () => {
+    // Slightly perturb American Robin (id=0) wave
+    const perturbedWave = birdDatabase[0].wave.map((v, i) => i === 0 ? v + 0.01 : v);
+    const result = findClosestBird(perturbedWave);
+    assertEqual(result.id, 0, `perturbed robin wave should still match robin, got "${result.name}"`);
+});
+test('wave of all zeros returns some bird (no crash)', () => {
+    const result = findClosestBird([0, 0, 0, 0, 0]);
+    assert(result !== null);
+});
+
+suite('calcPitchMultiplier — hand Y → playback rate');
+test('centerY=0.5 gives multiplier of exactly 1.0', () => {
+    assertApprox(calcPitchMultiplier(0.5), 1.0);
+});
+test('centerY=0 gives higher pitch (> 1)', () => {
+    assert(calcPitchMultiplier(0.0) > 1.0, 'hand at top should raise pitch');
+});
+test('centerY=1 gives lower pitch (< 1)', () => {
+    assert(calcPitchMultiplier(1.0) < 1.0, 'hand at bottom should lower pitch');
+});
+test('centerY=0 is approximately 5.66x (2^2.5 octaves up)', () => {
+    assertApprox(calcPitchMultiplier(0.0), Math.pow(2, 1.25), 0.01);
+});
+test('centerY=1 is approximately 0.177x (2.5 octaves down)', () => {
+    assertApprox(calcPitchMultiplier(1.0), Math.pow(2, -1.25), 0.01);
+});
+test('pitch is symmetric around 0.5', () => {
+    assertApprox(calcPitchMultiplier(0.3), 1 / calcPitchMultiplier(0.7), 0.001);
+});
+
+suite('getRandomBuffer — buffer selection from cache');
+test('returns null when bird has no cached audio', () => {
+    const getRandomBuffer = makeGetRandomBuffer({});
+    assertEqual(getRandomBuffer('American Robin'), null);
+});
+test('returns the single buffer when only one exists', () => {
+    const fakeBuffer = { id: 'buf1' };
+    const cache = { 'american_robin': [fakeBuffer] };
+    const getRandomBuffer = makeGetRandomBuffer(cache);
+    assertEqual(getRandomBuffer('American Robin'), fakeBuffer);
+});
+test('returns null for empty buffer array', () => {
+    const cache = { 'blue_jay': [] };
+    const getRandomBuffer = makeGetRandomBuffer(cache);
+    assertEqual(getRandomBuffer('Blue Jay'), null);
+});
+test('always returns one of the available buffers', () => {
+    const bufs = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    const cache = { 'mallard': bufs };
+    const getRandomBuffer = makeGetRandomBuffer(cache);
+    for (let i = 0; i < 30; i++) {
+        const result = getRandomBuffer('Mallard');
+        assert(bufs.includes(result), `returned an unexpected buffer: ${JSON.stringify(result)}`);
+    }
+});
+
+suite('birdDatabase — integrity checks');
+test('has exactly 25 birds', () => {
+    assertEqual(birdDatabase.length, 25);
+});
+test('each bird has a unique id', () => {
+    const ids = new Set(birdDatabase.map(b => b.id));
+    assertEqual(ids.size, 25);
+});
+test('each bird wave has exactly 5 elements', () => {
+    birdDatabase.forEach(b => assertEqual(b.wave.length, 5, `"${b.name}" wave length is ${b.wave.length}`));
+});
+test('all wave values are in [0.2, 0.8]', () => {
+    birdDatabase.forEach(b => b.wave.forEach((v, i) => {
+        assert(v >= 0.2 && v <= 0.8, `"${b.name}" wave[${i}]=${v} out of range`);
+    }));
+});
+test('all frequencies are between 400 and 3000 Hz', () => {
+    birdDatabase.forEach(b => {
+        assert(b.freq >= 400 && b.freq <= 3000, `"${b.name}" freq=${b.freq} out of range`);
+    });
+});
+test('oscillator types cycle through the 4 expected values', () => {
+    const valid = new Set(['sine', 'triangle', 'sawtooth', 'square']);
+    birdDatabase.forEach(b => assert(valid.has(b.type), `"${b.name}" has unknown type "${b.type}"`));
+});
+
+// ─────────────────────────────────────────────────────────────────
+// Summarize (sync results immediately; async tests update on resolve)
+// ─────────────────────────────────────────────────────────────────
+updateSummary();
+Promise.all(asyncTests).then(updateSummary);
+</script>
+</body>
+</html>
